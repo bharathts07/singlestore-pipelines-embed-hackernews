@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Zookeeper - Required for Kafka
+  # ============================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: singlestore-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - hn-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Kafka - Message broker for real-time data streaming
+  # ============================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: singlestore-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - hn-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Kafka UI - Optional web interface for Kafka monitoring
+  # ============================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: singlestore-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - hn-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Hacker News Fetcher - Polls HN API and publishes to Kafka
+  # ============================================================================
+  hn-fetcher:
+    build:
+      context: ./fetcher
+      dockerfile: Dockerfile
+    container_name: singlestore-hn-fetcher
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Kafka configuration
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC_STORIES: hn-stories
+      KAFKA_TOPIC_COMMENTS: hn-comments
+      
+      # Hacker News configuration
+      HN_FETCH_INTERVAL_SECONDS: ${HN_FETCH_INTERVAL_SECONDS:-30}
+      HN_MAX_STORIES_PER_FETCH: ${HN_MAX_STORIES_PER_FETCH:-50}
+      HN_MAX_COMMENTS_PER_STORY: ${HN_MAX_COMMENTS_PER_STORY:-50}
+      HN_ENABLE_STORIES: ${HN_ENABLE_STORIES:-true}
+      HN_ENABLE_COMMENTS: ${HN_ENABLE_COMMENTS:-true}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./fetcher:/app
+      - fetcher-history:/app/history
+    networks:
+      - hn-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Init Service - Creates Kafka topics on startup
+  # ============================================================================
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+        echo 'Waiting for Kafka to be ready...' &&
+        cub kafka-ready -b kafka:29092 1 30 &&
+        echo 'Creating Kafka topics...' &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 4 --replication-factor 1 --topic hn-stories &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 4 --replication-factor 1 --topic hn-comments &&
+        echo 'Topics created successfully!' &&
+        kafka-topics --list --bootstrap-server kafka:29092
+      "
+    networks:
+      - hn-network
+
+# ============================================================================
+# Volumes for data persistence
+# ============================================================================
+volumes:
+  zookeeper-data:
+    driver: local
+  zookeeper-logs:
+    driver: local
+  kafka-data:
+    driver: local
+  fetcher-history:
+    driver: local
+
+# ============================================================================
+# Network configuration
+# ============================================================================
+networks:
+  hn-network:
+    driver: bridge
