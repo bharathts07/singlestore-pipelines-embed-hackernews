@@ -19,6 +19,29 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 KAFKA_TOPIC_STORIES = os.getenv("KAFKA_TOPIC_STORIES", "hn-stories")
 KAFKA_TOPIC_COMMENTS = os.getenv("KAFKA_TOPIC_COMMENTS", "hn-comments")
 
+# Kafka Authentication (optional - for Confluent Cloud / AWS MSK)
+KAFKA_API_KEY = os.getenv("KAFKA_API_KEY", "")
+KAFKA_API_SECRET = os.getenv("KAFKA_API_SECRET", "")
+
+# Build Kafka producer config
+def get_kafka_config():
+    """Returns Kafka configuration dict based on authentication settings"""
+    config = {
+        'bootstrap_servers': KAFKA_BOOTSTRAP_SERVERS.split(','),
+        'value_serializer': lambda v: __import__('json').dumps(v).encode('utf-8')
+    }
+    
+    # Add authentication if credentials are provided
+    if KAFKA_API_KEY and KAFKA_API_SECRET:
+        config.update({
+            'security_protocol': 'SASL_SSL',
+            'sasl_mechanism': 'PLAIN',
+            'sasl_plain_username': KAFKA_API_KEY,
+            'sasl_plain_password': KAFKA_API_SECRET
+        })
+    
+    return config
+
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

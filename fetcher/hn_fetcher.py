@@ -45,15 +45,15 @@ class HackerNewsFetcher:
         self.processed_stories: Set[int] = set()
         self.processed_comments: Set[int] = set()
         
-        # Initialize Kafka producer
-        self.producer = KafkaProducer(
-            bootstrap_servers=config.KAFKA_BOOTSTRAP_SERVERS,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-            key_serializer=lambda k: str(k).encode('utf-8') if k else None,
-            acks='all',  # Wait for all replicas to acknowledge
-            retries=3,
-            max_in_flight_requests_per_connection=1  # Ensure ordering
-        )
+        # Initialize Kafka producer with authentication support
+        kafka_config = config.get_kafka_config()
+        kafka_config.update({
+            'key_serializer': lambda k: str(k).encode('utf-8') if k else None,
+            'acks': 'all',  # Wait for all replicas to acknowledge
+            'retries': 3,
+            'max_in_flight_requests_per_connection': 1  # Ensure ordering
+        })
+        self.producer = KafkaProducer(**kafka_config)
         
         logger.info(f"Kafka producer initialized: {config.KAFKA_BOOTSTRAP_SERVERS}")
         

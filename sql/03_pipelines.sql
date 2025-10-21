@@ -30,11 +30,10 @@ USE hackernews_semantic;
 DROP PIPELINE IF EXISTS hn_stories_pipeline;
 
 -- Create the stories pipeline
+-- CONFIG is replaced by setup script based on environment (PLAINTEXT or SASL_SSL)
 CREATE PIPELINE hn_stories_pipeline AS
 LOAD DATA KAFKA '${KAFKA_BOOTSTRAP_SERVERS}/${KAFKA_TOPIC_STORIES}'
-    CONFIG '{
-        "security.protocol": "PLAINTEXT"
-    }'
+    CONFIG '${KAFKA_CONFIG}'
     
     -- Batch configuration for optimal performance
     BATCH_INTERVAL 5000  -- Process every 5 seconds
@@ -70,11 +69,10 @@ LOAD DATA KAFKA '${KAFKA_BOOTSTRAP_SERVERS}/${KAFKA_TOPIC_STORIES}'
 DROP PIPELINE IF EXISTS hn_comments_pipeline;
 
 -- Create the comments pipeline
+-- CONFIG is replaced by setup script based on environment (PLAINTEXT or SASL_SSL)
 CREATE PIPELINE hn_comments_pipeline AS
 LOAD DATA KAFKA '${KAFKA_BOOTSTRAP_SERVERS}/${KAFKA_TOPIC_COMMENTS}'
-    CONFIG '{
-        "security.protocol": "PLAINTEXT"
-    }'
+    CONFIG '${KAFKA_CONFIG}'
     
     -- Batch configuration
     BATCH_INTERVAL 5000

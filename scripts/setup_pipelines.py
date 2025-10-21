@@ -44,6 +44,40 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 KAFKA_TOPIC_STORIES = os.getenv("KAFKA_TOPIC_STORIES", "hn-stories")
 KAFKA_TOPIC_COMMENTS = os.getenv("KAFKA_TOPIC_COMMENTS", "hn-comments")
 
+# Kafka authentication (optional, for Confluent Cloud / AWS MSK)
+KAFKA_API_KEY = os.getenv("KAFKA_API_KEY", "")
+KAFKA_API_SECRET = os.getenv("KAFKA_API_SECRET", "")
+
+def get_kafka_config():
+    """Build Kafka CONFIG string based on authentication settings"""
+    if KAFKA_API_KEY and KAFKA_API_SECRET:
+        # Confluent Cloud / Authenticated Kafka
+        return f'''{{
+        "security.protocol": "SASL_SSL",
+        "sasl.mechanism": "PLAIN",
+        "sasl.username": "{KAFKA_API_KEY}",
+        "sasl.password": "{KAFKA_API_SECRET}"
+    }}'''
+    else:
+        # Local / Unauthenticated Kafka
+        return '''{
+        "security.protocol": "PLAINTEXT"
+    }'''
+
+
+def create_pipelines(conn):
+    """Create Kafka pipelines"""
+    logger.info("Creating Kafka pipelines...")
+    
+    # Read and process pipeline SQL
+    sql_file = "sql/03_pipelines.sql"
+    with open(sql_file, 'r') as f:
+        content = f.read()
+    
+    # Replace environment variables
+    content = content.replace('${KAFKA_BOOTSTRAP_SERVERS}', KAFKA_BOOTSTRAP_SERVERS)
+    content = content.replace('${KAFKA_CONFIG}', get_kafka_config())
+
 
 def create_pipelines(conn):
     """Create Kafka pipelines"""
