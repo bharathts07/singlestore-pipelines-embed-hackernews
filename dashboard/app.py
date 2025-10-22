@@ -139,47 +139,42 @@ async def health_check():
 @app.post("/api/search/stories", response_model=List[StoryResult])
 async def search_stories(search: SearchQuery):
     """
-    Semantic search on stories
+    Semantic search on stories using stored procedure
     """
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # Generate embedding for the query
+            # Use the stored procedure for semantic search
             cursor.execute(
-                "SELECT cluster.EMBED_TEXT(%s) AS embedding",
-                (search.query,)
+                "CALL semantic_search_stories(%s, %s, %s)",
+                (search.query, search.limit, search.min_score)
             )
-            query_embedding = cursor.fetchone()[0]
-            
-            # Perform semantic search
-            cursor.execute("""
-                SELECT 
-                    id,
-                    title,
-                    url,
-                    score,
-                    `by` AS author,
-                    descendants,
-                    DATE_FORMAT(time, '%%Y-%%m-%%d %%H:%%i:%%s') AS time,
-                    DOT_PRODUCT(title_embedding, %s) AS similarity
-                FROM hn_stories
-                WHERE title_embedding IS NOT NULL
-                  AND score >= %s
-                ORDER BY similarity DESC
-                LIMIT %s
-            """, (query_embedding, search.min_score, search.limit))
             
             results = []
-            for row in cursor.fetchall():
+            rows = cursor.fetchall()
+            logger.info(f"Got {len(rows)} results from procedure")
+            if rows:
+                logger.info(f"First row has {len(rows[0])} columns")
+                logger.info(f"First row types: {[type(val).__name__ for val in rows[0]]}")
+                logger.info(f"Similarity value (row[7]): {rows[0][7] if len(rows[0]) > 7 else 'N/A'}")
+                
+            for row in rows:
+                # Handle Decimal type for similarity
+                sim_value = row[7] if len(row) > 7 else None
+                if sim_value is not None:
+                    similarity = float(sim_value) if hasattr(sim_value, '__float__') else float(str(sim_value))
+                else:
+                    similarity = 0.0
+                    
                 results.append(StoryResult(
                     id=row[0],
                     title=row[1],
-                    url=row[2],
-                    score=row[3],
-                    by=row[4],
-                    descendants=row[5],
-                    time=row[6],
-                    similarity=float(row[7])
+                    url=row[2] if row[2] else "",
+                    score=row[3] if row[3] else 0,
+                    by=row[4] if row[4] else "",
+                    descendants=row[5] if row[5] else 0,
+                    time=str(row[6]) if row[6] else "",
+                    similarity=similarity
                 ))
             
             return results
@@ -189,45 +184,27 @@ async def search_stories(search: SearchQuery):
 @app.post("/api/search/comments", response_model=List[CommentResult])
 async def search_comments(search: SearchQuery):
     """
-    Semantic search on comments
+    Semantic search on comments using stored procedure
     """
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # Generate embedding for the query
+            # Use the stored procedure for semantic search
             cursor.execute(
-                "SELECT cluster.EMBED_TEXT(%s) AS embedding",
-                (search.query,)
+                "CALL semantic_search_comments(%s, %s)",
+                (search.query, search.limit)
             )
-            query_embedding = cursor.fetchone()[0]
-            
-            # Perform semantic search
-            cursor.execute("""
-                SELECT 
-                    c.id AS comment_id,
-                    c.text AS comment_text,
-                    c.`by` AS comment_author,
-                    s.id AS story_id,
-                    s.title AS story_title,
-                    s.score AS story_score,
-                    DOT_PRODUCT(c.text_embedding, %s) AS similarity
-                FROM hn_comments c
-                JOIN hn_stories s ON c.story_id = s.id
-                WHERE c.text_embedding IS NOT NULL
-                ORDER BY similarity DESC
-                LIMIT %s
-            """, (query_embedding, search.limit))
             
             results = []
             for row in cursor.fetchall():
                 results.append(CommentResult(
                     comment_id=row[0],
-                    comment_text=row[1][:200],  # Truncate long comments
-                    comment_author=row[2],
+                    comment_text=(row[1][:200] if row[1] else "")[:200],  # Truncate long comments
+                    comment_author=row[2] if row[2] else "",
                     story_id=row[3],
-                    story_title=row[4],
-                    story_score=row[5],
-                    similarity=float(row[6])
+                    story_title=row[4] if row[4] else "",
+                    story_score=row[5] if row[5] else 0,
+                    similarity=float(row[6]) if row[6] is not None else 0.0
                 ))
             
             return results
@@ -237,31 +214,22 @@ async def search_comments(search: SearchQuery):
 @app.get("/api/stats", response_model=Stats)
 async def get_stats():
     """
-    Get overall ingestion statistics
+    Get overall ingestion statistics using stored procedure
     """
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT 
-                    (SELECT COUNT(*) FROM hn_stories) AS total_stories,
-                    (SELECT COUNT(*) FROM hn_comments) AS total_comments,
-                    (SELECT COUNT(*) FROM hn_stories WHERE title_embedding IS NOT NULL) AS stories_with_embeddings,
-                    (SELECT COUNT(*) FROM hn_comments WHERE text_embedding IS NOT NULL) AS comments_with_embeddings,
-                    (SELECT AVG(processing_time_ms) FROM ingestion_stats 
-                     WHERE stat_type = 'stories' AND timestamp >= NOW() - INTERVAL 1 HOUR) AS avg_story_processing_ms,
-                    (SELECT AVG(processing_time_ms) FROM ingestion_stats 
-                     WHERE stat_type = 'comments' AND timestamp >= NOW() - INTERVAL 1 HOUR) AS avg_comment_processing_ms
-            """)
+            # Use the stored procedure
+            cursor.execute("CALL get_ingestion_stats()")
             
             row = cursor.fetchone()
             return Stats(
-                total_stories=row[0],
-                total_comments=row[1],
-                stories_with_embeddings=row[2],
-                comments_with_embeddings=row[3],
-                avg_story_processing_ms=float(row[4]) if row[4] else None,
-                avg_comment_processing_ms=float(row[5]) if row[5] else None
+                total_stories=row[0] or 0,
+                total_comments=row[1] or 0,
+                stories_with_embeddings=row[2] or 0,
+                comments_with_embeddings=row[3] or 0,
+                avg_story_processing_ms=None,  # No longer tracking processing times
+                avg_comment_processing_ms=None
             )
     finally:
         conn.close()

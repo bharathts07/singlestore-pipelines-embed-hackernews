@@ -173,9 +173,17 @@ class HNFetcherDirect:
                 continue
             
             comment = self.fetch_item(comment_id)
-            if comment and comment.get('type') == 'comment':
-                self.process_comment(comment, story_id)
-                count += 1
+            # Skip deleted, dead, or non-comment items
+            if not comment or comment.get('deleted') or comment.get('dead') or comment.get('type') != 'comment':
+                continue
+            # Skip comments with no text
+            text = comment.get('text', '')
+            if not text or not text.strip():
+                logger.debug(f"Skipping comment {comment_id}: no text")
+                continue
+                
+            self.process_comment(comment, story_id)
+            count += 1
         
         if count > 0:
             logger.info(f"  → Processed {count} comments for story {story_id}")

@@ -1,5 +1,5 @@
 # ============================================================================
-# SingleStore EMBED_TEXT Demo - Direct Ingestion (No Kafka)
+# SingleStore EMBED_TEXT Demo: Hacker News Semantic Search
 # ============================================================================
 
 services:
