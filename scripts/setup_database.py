@@ -38,9 +38,8 @@ S2_CONFIG = {
     "password": os.getenv("SINGLESTORE_PASSWORD"),
 }
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-KAFKA_TOPIC_STORIES = os.getenv("KAFKA_TOPIC_STORIES", "hn-stories")
-KAFKA_TOPIC_COMMENTS = os.getenv("KAFKA_TOPIC_COMMENTS", "hn-comments")
+# Database name
+DATABASE_NAME = "hackernews_semantic"
 
 
 def execute_sql_file(conn, filepath: str, replace_vars: dict = None):
@@ -179,36 +178,14 @@ def main():
             if line.strip():
                 print(line)
     
-    # Create pipelines (optional - requires Kafka)
-    logger.info("Creating pipelines (requires Kafka)...")
-    result = subprocess.run(
-        [sys.executable, "scripts/setup_pipelines.py"],
-        capture_output=True,
-        text=True
-    )
-    if result.returncode != 0:
-        logger.warning("⚠ Pipelines not created (Kafka may not be running)")
-        logger.info("You can create them later by running:")
-        logger.info("  1. Start Kafka: docker-compose up -d kafka zookeeper")
-        logger.info("  2. Run: python scripts/setup_pipelines.py")
-    else:
-        # Show output from pipelines script
-        for line in result.stdout.split('\n'):
-            if line.strip():
-                print(line)
-    
     # Success
     logger.info("=" * 70)
     logger.info("✓ Database setup completed successfully!")
     logger.info("=" * 70)
     logger.info("")
     logger.info("Next steps:")
-    logger.info("  1. Start Kafka: docker-compose up -d kafka zookeeper")
-    logger.info("  2. Start HN fetcher: docker-compose up -d hn-fetcher")
-    logger.info("  3. Start dashboard: cd dashboard && python app.py")
-    logger.info("")
-    logger.info("Monitor pipelines:")
-    logger.info("  SELECT * FROM information_schema.PIPELINES;")
+    logger.info("  1. Start fetcher: docker-compose up -d")
+    logger.info("  2. Start dashboard: cd dashboard && python app.py")
     logger.info("")
     
     # Close connection if still open

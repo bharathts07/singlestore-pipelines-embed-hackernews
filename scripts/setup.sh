@@ -67,21 +67,9 @@ if [ $? -ne 0 ]; then
 fi
 echo ""
 
-# Start Kafka infrastructure
-echo "Starting Kafka infrastructure..."
-docker-compose up -d zookeeper kafka kafka-init kafka-ui
-echo -e "${GREEN}✓ Kafka infrastructure started${NC}"
-echo ""
-
-# Wait for Kafka to be ready
-echo "Waiting for Kafka to be ready (30 seconds)..."
-sleep 30
-echo -e "${GREEN}✓ Kafka should be ready${NC}"
-echo ""
-
 # Start HN fetcher
 echo "Starting Hacker News fetcher..."
-docker-compose up -d hn-fetcher
+docker-compose up -d
 echo -e "${GREEN}✓ HN fetcher started${NC}"
 echo ""
 
@@ -96,8 +84,8 @@ echo -e "${GREEN}✓ Setup completed successfully!${NC}"
 echo "============================================================================"
 echo ""
 echo "Services running:"
-echo "  • Kafka UI:     http://localhost:8080"
-echo "  • Dashboard:    http://localhost:5000"
+echo "  • Fetcher:      docker-compose ps"
+echo "  • Dashboard:    http://localhost:5000 (after starting)"
 echo ""
 echo "To start the dashboard:"
 echo "  ${YELLOW}source venv/bin/activate${NC}  # Activate virtual environment first"
@@ -109,7 +97,7 @@ echo "  ${YELLOW}source venv/bin/activate${NC}  # Activate virtual environment f
 echo "  python scripts/monitor.py"
 echo ""
 echo "To view logs:"
-echo "  docker-compose logs -f hn-fetcher"
+echo "  docker-compose logs -f"
 echo ""
 echo "To stop services:"
 echo "  docker-compose down"
