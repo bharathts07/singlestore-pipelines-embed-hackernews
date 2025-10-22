@@ -11,7 +11,7 @@ Real-time semantic search on Hacker News data using SingleStore's AI functions.
 ### 1. Clone and Setup
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/bharathts07/singlestore-pipelines-embed-hackernews.git
 cd singlestore-embed-pipelines
 
 # Create Python virtual environment

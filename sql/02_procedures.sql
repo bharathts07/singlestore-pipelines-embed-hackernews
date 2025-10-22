@@ -56,7 +56,7 @@ BEGIN
         NOW();
 END;
 
--- Semantic search on stories
+-- Semantic search on stories using native SingleStore DOT_PRODUCT
 CREATE OR REPLACE PROCEDURE semantic_search_stories(
     p_query_text TEXT,
     p_result_limit INT,
@@ -66,13 +66,14 @@ BEGIN
     IF p_result_limit IS NULL OR p_result_limit <= 0 THEN
         SET p_result_limit = 10;
     END IF;
+    
     IF p_min_score IS NULL THEN
         SET p_min_score = 0;
     END IF;
     
     ECHO SELECT 
         s.id, s.title, s.url, s.score, s.`by`, s.descendants, s.time,
-        DOT_PRODUCT(s.title_embedding, cluster.EMBED_TEXT(p_query_text)) AS similarity
+        DOT_PRODUCT(s.title_embedding, cluster.EMBED_TEXT(p_query_text):>VECTOR(2048)) AS similarity
     FROM hn_stories s
     WHERE s.title_embedding IS NOT NULL AND s.score >= p_min_score
     ORDER BY similarity DESC
@@ -96,7 +97,7 @@ BEGIN
         s.id AS story_id,
         s.title AS story_title,
         s.score AS story_score,
-        DOT_PRODUCT(c.text_embedding, cluster.EMBED_TEXT(p_query_text)) AS similarity
+        DOT_PRODUCT(c.text_embedding, cluster.EMBED_TEXT(p_query_text):>VECTOR(2048)) AS similarity
     FROM hn_comments c
     JOIN hn_stories s ON c.story_id = s.id
     WHERE c.text_embedding IS NOT NULL

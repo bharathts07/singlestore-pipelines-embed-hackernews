@@ -139,7 +139,7 @@ async def health_check():
 @app.post("/api/search/stories", response_model=List[StoryResult])
 async def search_stories(search: SearchQuery):
     """
-    Semantic search on stories using stored procedure
+    Semantic search on stories using stored procedure with DOT_PRODUCT in the engine
     """
     conn = get_connection()
     try:
@@ -153,13 +153,9 @@ async def search_stories(search: SearchQuery):
             results = []
             rows = cursor.fetchall()
             logger.info(f"Got {len(rows)} results from procedure")
-            if rows:
-                logger.info(f"First row has {len(rows[0])} columns")
-                logger.info(f"First row types: {[type(val).__name__ for val in rows[0]]}")
-                logger.info(f"Similarity value (row[7]): {rows[0][7] if len(rows[0]) > 7 else 'N/A'}")
                 
             for row in rows:
-                # Handle Decimal type for similarity
+                # Handle similarity value
                 sim_value = row[7] if len(row) > 7 else None
                 if sim_value is not None:
                     similarity = float(sim_value) if hasattr(sim_value, '__float__') else float(str(sim_value))
@@ -184,7 +180,7 @@ async def search_stories(search: SearchQuery):
 @app.post("/api/search/comments", response_model=List[CommentResult])
 async def search_comments(search: SearchQuery):
     """
-    Semantic search on comments using stored procedure
+    Semantic search on comments using stored procedure with DOT_PRODUCT in the engine
     """
     conn = get_connection()
     try:
@@ -199,7 +195,7 @@ async def search_comments(search: SearchQuery):
             for row in cursor.fetchall():
                 results.append(CommentResult(
                     comment_id=row[0],
-                    comment_text=(row[1][:200] if row[1] else "")[:200],  # Truncate long comments
+                    comment_text=(row[1][:200] if row[1] else "")[:200],
                     comment_author=row[2] if row[2] else "",
                     story_id=row[3],
                     story_title=row[4] if row[4] else "",
